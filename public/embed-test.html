@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Support Widget — Embed Test</title>
+    <style>
+      body {
+        font-family: Roboto, system-ui, sans-serif;
+        margin: 0;
+        padding: 4rem 1.5rem;
+        color: #1a1a22;
+        background: #faf9fc;
+      }
+      .wrap { max-width: 640px; margin: 0 auto; }
+      h1 { color: #5a24ba; }
+      code { background: #efeaf8; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Example customer website</h1>
+      <p>
+        This page simulates an external site. The floating AI support assistant
+        in the bottom-right corner is injected by a single script tag:
+      </p>
+      <pre><code>&lt;script src="http://localhost:3000/embed/widget.js"
+        data-org="support" data-color="#5A24BA" async&gt;&lt;/script&gt;</code></pre>
+      <p>Click the bubble to open the assistant.</p>
+    </div>
+
+    <!-- The embeddable AI support assistant -->
+    <script
+      src="http://localhost:3000/embed/widget.js"
+      data-org="support"
+      data-color="#5A24BA"
+      async
+    ></script>
+  </body>
+</html>
