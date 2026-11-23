@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Keep Playwright out of the server bundle — it loads native browser binaries.
-  serverExternalPackages: ["playwright"],
+  // Keep browser automation packages out of the server bundle — they load
+  // native binaries that must be required at runtime, not webpack-bundled.
+  serverExternalPackages: ["playwright", "playwright-core", "@sparticuz/chromium"],
   async headers() {
     return [
       {

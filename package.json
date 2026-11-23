@@ -13,6 +13,7 @@
     "create-admin": "node scripts/create-admin.mjs"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^153.0.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "class-variance-authority": "^0.7.1",
@@ -21,6 +22,7 @@
     "next": "^15.5.29",
     "openai": "^4.77.0",
     "playwright": "^1.65.1",
+    "playwright-core": "^1.65.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "tailwind-merge": "^2.6.0",

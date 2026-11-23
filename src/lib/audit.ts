@@ -259,21 +259,45 @@ async function acceptConsent(page: any) {
  * accepts cookie consent, and captures the ACTUAL tag network requests — so it
  * sees GA4 / Google Ads / Meta Pixel / GTM even when injected at runtime.
  */
-async function auditWithBrowser(url: string): Promise<AuditResult> {
-  const checkedAt = new Date().toISOString();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let chromium: any;
-  try {
-    ({ chromium } = await import("playwright"));
-  } catch {
-    // Playwright not installed — signal caller to fall back.
-    throw new Error("playwright-unavailable");
+/**
+ * Launches headless Chromium. On serverless (Vercel/Lambda) there is no system
+ * Chrome, so we use @sparticuz/chromium's bundled binary via playwright-core.
+ * Locally we use the full playwright package (with its own browser download).
+ * Throws "playwright-unavailable" so the caller can fall back to the HTML scan.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function launchBrowser(): Promise<any> {
+  const isServerless =
+    !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (isServerless) {
+    try {
+      const sparticuz = (await import("@sparticuz/chromium")).default;
+      const { chromium } = await import("playwright-core");
+      return await chromium.launch({
+        args: sparticuz.args,
+        executablePath: await sparticuz.executablePath(),
+        headless: true,
+      });
+    } catch {
+      throw new Error("playwright-unavailable");
+    }
   }
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-dev-shm-usage"],
-  });
+  try {
+    const { chromium } = await import("playwright");
+    return await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+  } catch {
+    throw new Error("playwright-unavailable");
+  }
+}
+
+async function auditWithBrowser(url: string): Promise<AuditResult> {
+  const checkedAt = new Date().toISOString();
+  const browser = await launchBrowser();
   try {
     const context = await browser.newContext({
       userAgent: BROWSER_UA,

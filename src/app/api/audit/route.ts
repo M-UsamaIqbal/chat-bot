@@ -5,6 +5,8 @@ import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Serverless Chromium cold-start + page load needs more than the default 10s.
+export const maxDuration = 60;
 
 const schema = z.object({ url: z.string().min(3).max(300) });
 
