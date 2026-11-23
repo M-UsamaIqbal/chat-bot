@@ -12,6 +12,14 @@ export interface TrackerResult {
   viaGtm?: boolean;
 }
 
+/** A prescriptive finding: what's wrong (or right) and why it matters in money terms. */
+export interface AuditInsight {
+  severity: "critical" | "warning" | "good";
+  title: string;
+  /** Plain-language explanation of the business impact. */
+  impact: string;
+}
+
 export interface AuditResult {
   ok: boolean;
   url: string;
@@ -23,6 +31,10 @@ export interface AuditResult {
   coreTotal: number;
   viaGtm: boolean;
   checkedAt: string;
+  /** Prescriptive, impact-focused findings derived from the detected trackers. */
+  insights?: AuditInsight[];
+  /** 0–100 attribution-readiness grade (weights gaps by how much they hurt). */
+  grade?: number;
 }
 
 export interface ChatMessage {

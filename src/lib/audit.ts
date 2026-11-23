@@ -6,7 +6,7 @@
  * SSRF-guarded: only public http(s) hosts are fetched.
  */
 
-import type { AuditResult, TrackerResult } from "@/lib/types";
+import type { AuditResult, AuditInsight, TrackerResult } from "@/lib/types";
 export type { AuditResult, TrackerResult };
 
 interface Signature {
@@ -351,6 +351,7 @@ async function auditWithBrowser(url: string): Promise<AuditResult> {
 
     const trackers = analyzeCorpus(pageText, containerText);
     const foundCount = trackers.filter((t) => t.found).length;
+    const { insights, grade } = buildInsights(trackers);
 
     return {
       ok: true,
@@ -362,6 +363,8 @@ async function auditWithBrowser(url: string): Promise<AuditResult> {
       coreTotal: trackers.length,
       viaGtm: trackers.find((t) => t.key === "gtm")?.found ?? false,
       checkedAt,
+      insights,
+      grade,
     };
   } finally {
     await browser.close().catch(() => {});
@@ -484,6 +487,7 @@ async function auditWithHtml(rawUrl: string): Promise<AuditResult> {
     (t) => t.found && SIGNATURES.find((s) => s.key === t.key)?.core
   ).length;
   const viaGtm = trackers.find((t) => t.key === "gtm")?.found ?? false;
+  const { insights, grade } = buildInsights(trackers);
 
   return {
     ok: true,
@@ -495,7 +499,117 @@ async function auditWithHtml(rawUrl: string): Promise<AuditResult> {
     coreTotal: base.coreTotal,
     viaGtm,
     checkedAt,
+    insights,
+    grade,
   };
+}
+
+/**
+ * Turns the raw tracker list into prescriptive, money-focused findings and an
+ * attribution-readiness grade. This is what makes the audit *useful* rather than
+ * a checklist: it tells the visitor what each gap costs them.
+ */
+export function buildInsights(trackers: TrackerResult[]): {
+  insights: AuditInsight[];
+  grade: number;
+} {
+  const t = (key: string) => trackers.find((x) => x.key === key);
+  const gtm = t("gtm");
+  const ga4 = t("ga4");
+  const ads = t("google_ads");
+  const meta = t("meta");
+  const insights: AuditInsight[] = [];
+
+  // Weighted attribution-readiness grade (GA4 + Ads conversion matter most).
+  const weights: Record<string, number> = {
+    ga4: 30,
+    google_ads: 30,
+    meta: 25,
+    gtm: 15,
+  };
+  let grade = 0;
+  for (const [key, w] of Object.entries(weights)) if (t(key)?.found) grade += w;
+
+  // GA4 — the measurement foundation.
+  if (!ga4?.found) {
+    insights.push({
+      severity: "critical",
+      title: "No GA4 analytics detected",
+      impact:
+        "You have no first-party record of which pages, campaigns, and channels drive conversions — you're flying blind on ROI and can't prove what's working.",
+    });
+  } else {
+    insights.push({
+      severity: "good",
+      title: "GA4 is measuring your traffic",
+      impact:
+        "You have a first-party analytics foundation — the basis for every attribution and optimization decision.",
+    });
+  }
+
+  // Google Ads conversion tracking.
+  if (!ads?.found) {
+    insights.push({
+      severity: "critical",
+      title: "No Google Ads conversion tag",
+      impact:
+        "If you run Google or YouTube ads, Google can't see which clicks become customers — Smart Bidding optimizes on nothing and budget leaks into losing keywords.",
+    });
+  }
+
+  // Meta Pixel.
+  if (!meta?.found) {
+    insights.push({
+      severity: "warning",
+      title: "No Meta Pixel detected",
+      impact:
+        "You can't retarget site visitors on Facebook/Instagram and Meta's algorithm can't optimize for buyers. Cold-only targeting typically costs 2–4× more per conversion.",
+    });
+  }
+
+  // GTM governance.
+  if (!gtm?.found) {
+    insights.push({
+      severity: "warning",
+      title: "No Google Tag Manager",
+      impact:
+        "Every new tag or fix needs a developer and a deploy — slowing you down and risking hard-coded tags that fire inconsistently or break silently.",
+    });
+  }
+
+  // Tags configured in GTM but not firing on the page (consent/trigger gap).
+  for (const tr of trackers) {
+    if (tr.viaGtm) {
+      insights.push({
+        severity: "warning",
+        title: `${tr.name} isn't firing on the page`,
+        impact:
+          "It's configured in your GTM container but didn't fire during the scan — likely blocked by consent or a trigger misconfiguration, so you may be losing data you think you're collecting.",
+      });
+    }
+  }
+
+  // Duplicate GA4 properties double-count events.
+  if (ga4?.found && ga4.ids.length > 1) {
+    insights.push({
+      severity: "warning",
+      title: "Multiple GA4 IDs detected",
+      impact:
+        "More than one GA4 property is loading — events get double-counted, which inflates your numbers and corrupts attribution and conversion rates.",
+    });
+  }
+
+  // All core present — reinforce, then push toward depth.
+  if (ga4?.found && ads?.found && meta?.found) {
+    insights.push({
+      severity: "good",
+      title: "Core ad-tracking stack is in place",
+      impact:
+        "GA4, Google Ads and Meta are all present. The next wins are accuracy: server-side tracking, consent mode, and deduplicated conversions.",
+    });
+  }
+
+  return { insights, grade };
 }
 
 /** Compact text summary for the AI model to narrate after a tool call. */
@@ -505,16 +619,22 @@ export function summarizeAudit(a: AuditResult): string {
   const missingCore = a.trackers
     .filter((t) => !t.found && SIGNATURES.find((s) => s.key === t.key)?.core)
     .map((t) => t.name);
+  const topIssue = (a.insights ?? []).find((i) => i.severity === "critical")
+    ?? (a.insights ?? []).find((i) => i.severity === "warning");
   return [
     `Audit complete for ${a.finalUrl} (a visual report card was shown to the user).`,
+    typeof a.grade === "number"
+      ? `Attribution-readiness grade: ${a.grade}/100.`
+      : "",
     found.length ? `Detected: ${found.join(", ")}.` : "No tracking tags detected.",
     missingCore.length
       ? `Notable missing: ${missingCore.join(", ")}.`
       : "All core ad-tracking tags are present.",
-    a.viaGtm
-      ? "Some tags may be managed through Google Tag Manager."
+    topIssue
+      ? `The biggest issue to call out: ${topIssue.title} — ${topIssue.impact}`
       : "",
-    "Briefly point out the gaps and invite them to book a free strategy call to fix them. The card already shows the tracker details AND a 'Book a free strategy call' button, so do NOT re-list every tracker and do NOT paste the booking link in your text — just invite them in one short sentence.",
+    a.viaGtm ? "Some tags may be managed through Google Tag Manager." : "",
+    "Lead with the single biggest issue above in one plain sentence (what it costs them), then invite them to book a free strategy call to fix it. The card already shows the full breakdown AND a booking button, so do NOT re-list every tracker and do NOT paste the booking link in your text.",
   ]
     .filter(Boolean)
     .join(" ");

@@ -1,4 +1,12 @@
-import { CheckCircle2, XCircle, ShieldCheck, Gauge, ExternalLink } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  ShieldCheck,
+  Gauge,
+  ExternalLink,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 import type { AuditResult } from "@/lib/types";
 
 /** Visual report card for a website tracking audit, shown inline in the chat. */
@@ -29,9 +37,14 @@ export function AuditCard({
 
   const present = audit.trackers.filter((t) => t.found);
   const missing = audit.trackers.filter((t) => !t.found);
-  const pct = Math.round((audit.coreFound / Math.max(1, audit.coreTotal)) * 100);
+  // Prefer the weighted attribution-readiness grade; fall back to tag coverage.
+  const pct =
+    typeof audit.grade === "number"
+      ? audit.grade
+      : Math.round((audit.coreFound / Math.max(1, audit.coreTotal)) * 100);
   const scoreColor =
     pct >= 75 ? "#16a34a" : pct >= 40 ? "#d97706" : "#dc2626";
+  const insights = audit.insights ?? [];
 
   return (
     <div className="w-full overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -64,17 +77,25 @@ export function AuditCard({
               pathLength={100}
             />
           </svg>
-          <Gauge
-            className="absolute h-5 w-5"
-            style={{ color: scoreColor }}
-          />
+          {typeof audit.grade === "number" ? (
+            <span
+              className="absolute text-sm font-bold"
+              style={{ color: scoreColor }}
+            >
+              {audit.grade}
+            </span>
+          ) : (
+            <Gauge className="absolute h-5 w-5" style={{ color: scoreColor }} />
+          )}
         </div>
         <div className="text-sm">
           <div className="font-semibold">
-            {audit.coreFound} of {audit.coreTotal} key tags found
+            {typeof audit.grade === "number"
+              ? "Attribution-readiness score"
+              : `${audit.coreFound} of ${audit.coreTotal} key tags found`}
           </div>
           <div className="text-xs text-muted-foreground">
-            GTM · GA4 · Google Ads · Meta Pixel
+            {audit.coreFound} of {audit.coreTotal} key tags · GA4 · Google Ads · Meta
             {audit.viaGtm ? " · reading GTM container" : ""}
           </div>
         </div>
@@ -126,6 +147,38 @@ export function AuditCard({
           </div>
         )}
       </div>
+
+      {/* What this means for you — prescriptive, impact-focused findings */}
+      {insights.length > 0 && (
+        <div className="space-y-2 border-t px-4 py-3">
+          <div className="text-[10px] font-semibold uppercase text-muted-foreground">
+            What this means for you
+          </div>
+          {insights.map((ins, i) => {
+            const Icon =
+              ins.severity === "good"
+                ? CheckCircle2
+                : ins.severity === "critical"
+                ? AlertTriangle
+                : Info;
+            const color =
+              ins.severity === "good"
+                ? "text-green-600"
+                : ins.severity === "critical"
+                ? "text-red-600"
+                : "text-amber-600";
+            return (
+              <div key={i} className="flex items-start gap-2">
+                <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${color}`} />
+                <div className="min-w-0 text-xs">
+                  <div className="font-semibold">{ins.title}</div>
+                  <div className="text-muted-foreground">{ins.impact}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* CTA */}
       {bookingUrl && (

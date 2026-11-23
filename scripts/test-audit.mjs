@@ -6,7 +6,7 @@
  * the live page) is still detected AND flagged viaGtm — while tags that fire
  * directly on the page are NOT flagged viaGtm.
  */
-import { analyzeCorpus } from "../src/lib/audit.ts";
+import { analyzeCorpus, buildInsights } from "../src/lib/audit.ts";
 
 let pass = 0,
   fail = 0;
@@ -54,6 +54,43 @@ console.log("\nCase 3: no GTM container");
   check("GTM not found", by(t, "gtm").found === false);
   check("GA4 found, not viaGtm", by(t, "ga4").found === true && by(t, "ga4").viaGtm === false);
   check("Google Ads found", by(t, "google_ads").found === true);
+}
+
+// --- Case 4: prescriptive insights + weighted grade.
+console.log("\nCase 4: insights & grade");
+{
+  // Full stack on page -> high grade, no critical issues, a "good" summary.
+  const full = analyzeCorpus(
+    `gtm.js?id=GTM-ABCD12 gtag/js?id=G-FULL1234 AW-1234567 fbq('init','123456789012345')`,
+    ""
+  );
+  const { insights: fi, grade: fg } = buildInsights(full);
+  check("full stack grade is 100", fg === 100);
+  check("full stack has no critical issues", fi.every((i) => i.severity !== "critical"));
+
+  // Empty site -> low grade, GA4 + Ads flagged critical.
+  const none = analyzeCorpus(`<html></html>`, "");
+  const { insights: ni, grade: ng } = buildInsights(none);
+  check("empty site grade is 0", ng === 0);
+  check(
+    "empty site flags missing GA4 as critical",
+    ni.some((i) => i.severity === "critical" && /GA4/.test(i.title))
+  );
+  check(
+    "empty site flags missing Google Ads as critical",
+    ni.some((i) => i.severity === "critical" && /Google Ads/.test(i.title))
+  );
+
+  // Tag only in GTM container -> "isn't firing" warning.
+  const gated = analyzeCorpus(
+    `gtm.js?id=GTM-ABCD12`,
+    `gtag/js?id=G-GATED123 connect.facebook.net fbq('init','123456789012345')`
+  );
+  const { insights: gi } = buildInsights(gated);
+  check(
+    "consent-gated tag produces an 'isn't firing' warning",
+    gi.some((i) => /isn't firing/.test(i.title))
+  );
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
