@@ -17,6 +17,12 @@ const CONTEXT_CHAR_BUDGET = 6_000;
 const MAX_DOCS = 4;
 const PER_DOC_CHARS = 1_800;
 
+// Docs whose title starts with this are "pinned": always injected first,
+// regardless of keyword score. Used for the capabilities/overview doc so the bot
+// can answer meta questions ("what can you help with?", "what do you offer?")
+// even though those have almost no usable keyword signal.
+const PINNED_TITLE_PREFIX = "Overview —";
+
 /** Stores text/FAQ/URL content for retrieval-by-injection. */
 export async function indexText(
   organizationId: string,
@@ -159,20 +165,33 @@ export async function getKnowledgeContext(
 
     const terms = queryTerms(query);
 
-    // Rank by relevance; with no usable query terms, fall back to the first docs.
+    // Pin the overview/capabilities doc(s) so they're always available — meta
+    // questions ("what do you offer?") carry no keyword signal to retrieve them.
+    const pinned = data.filter((d) =>
+      (d.title || "").startsWith(PINNED_TITLE_PREFIX)
+    );
+    const rest = data.filter(
+      (d) => !(d.title || "").startsWith(PINNED_TITLE_PREFIX)
+    );
+
+    // Rank the remaining docs by relevance; with no usable query terms, fall
+    // back to the first docs.
     const ranked =
       terms.length > 0
-        ? data
+        ? rest
             .map((d) => ({ d, s: scoreDoc(d, terms) }))
             .sort((a, b) => b.s - a.s)
-        : data.map((d) => ({ d, s: 1 }));
+        : rest.map((d) => ({ d, s: 1 }));
 
     const picked = ranked.filter((r) => r.s > 0).slice(0, MAX_DOCS);
     const chosen = picked.length > 0 ? picked : ranked.slice(0, 2);
 
+    // Pinned docs first, then the top-ranked docs, within the char budget.
+    const ordered = [...pinned.map((d) => ({ d })), ...chosen];
+
     let budget = CONTEXT_CHAR_BUDGET;
     const blocks: string[] = [];
-    for (const { d } of chosen) {
+    for (const { d } of ordered) {
       if (!d.content) continue;
       const snippet = bestSnippet(d.content, terms);
       const header = `### ${d.title}${d.url ? ` (${d.url})` : ""}`;
