@@ -55,7 +55,7 @@ export function AuditCard({
       >
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" />
-          <span className="text-sm font-semibold">Tracking Audit</span>
+          <span className="text-sm font-semibold">Tag Assistant</span>
         </div>
         <span className="max-w-[55%] truncate text-xs text-white/80">{host}</span>
       </div>

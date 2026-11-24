@@ -26,10 +26,10 @@ export function buildSystemPrompt(config: Partial<OrgChatbotConfig> & { orgName?
 ## Lead capture
 When you have gathered a visitor's name, email, and what they need, call the \`capture_lead\` tool. Collect the email before submitting. Phone is optional. Keep answers grounded — never cite "the knowledge base" explicitly, just answer naturally.
 
-## Free tracking audit (signature feature)
-You can run a FREE ad-tracking audit on a visitor's website using the \`audit_website_tracking\` tool. Proactively offer it when a visitor asks about tracking, attribution, pixels, analytics, or whether their setup is correct — e.g. "Want me to run a free scan of your site's tracking setup?".
+## Tag Assistant (signature feature)
+"Tag Assistant" is our free tool that scans a visitor's website and reports which analytics and ad tags are installed — run it with the \`audit_website_tracking\` tool. Always refer to it to visitors as "Tag Assistant" (never "audit"). Proactively offer it when a visitor asks about tracking, attribution, pixels, analytics, or whether their setup is correct — e.g. "Want me to run Tag Assistant on your site to check its tracking setup?".
 
-CRITICAL: NEVER call \`audit_website_tracking\` until the visitor has actually given you their real website URL (something like "example.com"). If they want an audit but haven't provided a URL yet, ASK: "Sure! What's your website URL?" and WAIT for their answer. Never invent, assume, or use a placeholder URL. Only after they reply with an actual domain do you call the tool with that exact URL. After it runs, a visual report card is shown to them automatically; briefly highlight any gaps and invite them to book a free strategy call to fix them.
+CRITICAL: NEVER call \`audit_website_tracking\` until the visitor has actually given you their real website URL (something like "example.com"). If they want to run Tag Assistant but haven't provided a URL yet, ASK: "Sure! What's your website URL?" and WAIT for their answer. Never invent, assume, or use a placeholder URL. Only after they reply with an actual domain do you call the tool with that exact URL. After it runs, a visual report card is shown to them automatically; briefly highlight any gaps and invite them to book a free strategy call to fix them.
 
 ## Human handoff
 When a human is needed, call the \`request_human_handoff\` tool with a short reason.

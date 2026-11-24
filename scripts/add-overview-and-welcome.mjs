@@ -38,20 +38,20 @@ ANALYTICS & REPORTING: Google Analytics 4 (GA4) setup, GA4 migration from Univer
 
 WEBSITES & AUTOMATION: custom web design and web development, marketing automation, GoHighLevel setup, and API and webhook integrations.
 
-FREE TRACKING AUDIT: I can run a free live audit of your website to detect which tracking tags (GA4, Google Ads, Meta Pixel, Google Tag Manager) are installed and what is missing — just share your website URL.
+TAG ASSISTANT (free): I can run our free Tag Assistant tool on your website to detect which tracking tags (GA4, Google Ads, Meta Pixel, Google Tag Manager) are installed and what is missing — just share your website URL.
 
 CASE STUDIES: real results for ClickFunnels, WebinarJam, EverWebinar, Thinkific/Hyros, Zoom and Acuity.
 
 PRACTICAL HELP: our services, how to get started, how to contact us, how to book a free strategy call, and company/about info.
 
-Not sure what to ask? Try: "What services do you offer?", "Can you audit my tracking?", "Do you set up Google Ads and Meta conversion tracking?", "How do I contact you?", or "I'd like to book a call."`;
+Not sure what to ask? Try: "What services do you offer?", "Run Tag Assistant on my site", "Do you set up Google Ads and Meta conversion tracking?", "How do I contact you?", or "I'd like to book a call."`;
 
 const WELCOME =
-  "👋 Hi! I can help with ad conversion tracking, GA4 & analytics, attribution, and web/marketing setup — and I can run a free tracking audit of your website. What can I help you with today?";
+  "👋 Hi! I can help with ad conversion tracking, GA4 & analytics, attribution, and web/marketing setup — and I can run Tag Assistant, a free scan of your website's tracking tags. What can I help you with today?";
 
 const SUGGESTED = [
   "What can you help me with?",
-  "Run a free tracking audit of my site",
+  "Run Tag Assistant on my site",
   "Do you set up GA4 & conversion tracking?",
   "Book a free strategy call",
 ];

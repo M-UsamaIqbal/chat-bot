@@ -230,7 +230,7 @@ export function useChat({ orgSlug, welcomeMessage, apiUrl = "/api/chat" }: UseCh
               ? result.ok
                 ? {
                     ...m,
-                    content: `Here's your tracking audit — ${result.foundCount} tracker${
+                    content: `Here's your Tag Assistant report — ${result.foundCount} tracker${
                       result.foundCount === 1 ? "" : "s"
                     } detected. See the report below. 👇`,
                     audit: result,

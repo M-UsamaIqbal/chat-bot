@@ -186,7 +186,7 @@ export function ChatWidget({
             onClick={startAudit}
             className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-secondary px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
           >
-            <ShieldCheck className="h-3.5 w-3.5" /> Free tracking audit
+            <ShieldCheck className="h-3.5 w-3.5" /> Tag Assistant
           </button>
           {bookingUrl && (
             <button
@@ -204,7 +204,7 @@ export function ChatWidget({
         <div className="flex items-center justify-between gap-2 border-t bg-secondary px-3 py-2 text-xs text-primary">
           <span className="flex items-center gap-1.5 font-medium">
             <ShieldCheck className="h-3.5 w-3.5" />
-            Enter your website URL to scan its tracking setup
+            Enter your website URL and Tag Assistant will scan its tracking setup
           </span>
           <button
             onClick={() => setAuditMode(false)}
