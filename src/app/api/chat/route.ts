@@ -23,7 +23,7 @@ function sse(obj: unknown) {
 export async function POST(req: NextRequest) {
   // ---- Rate limiting (per IP) -------------------------------------------
   const ip = getClientIp(req);
-  const rl = rateLimit(`chat:${ip}`, 30, 60_000);
+  const rl = await rateLimit(`chat:${ip}`, 30, 60_000);
   if (!rl.success) {
     return new Response(
       JSON.stringify({ error: "Too many requests. Please slow down." }),

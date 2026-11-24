@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from "@/lib/config";
 import { leadSchema } from "@/lib/validation";
 import { upsertLead } from "@/lib/leads";
 import { auditTracking, summarizeAudit } from "@/lib/audit";
+import { notifyHandoff } from "@/lib/notify";
 import type { ResolvedOrg } from "@/lib/org";
 
 /**
@@ -140,7 +141,12 @@ async function captureLead(
 
   const lead = parsed.data;
 
-  const result = await upsertLead(ctx.org.org.id, ctx.conversationId, lead);
+  const result = await upsertLead(
+    ctx.org.org.id,
+    ctx.conversationId,
+    lead,
+    ctx.org.org.name
+  );
 
   if (!result.ok && result.reason === "db_unconfigured") {
     return {
@@ -220,6 +226,12 @@ async function requestHandoff(
         conversation_id: ctx.conversationId,
         reason,
         status: "pending",
+      });
+      // Alert the team — only for a newly-created pending handoff.
+      await notifyHandoff({
+        orgName: ctx.org.org.name,
+        reason,
+        conversationId: ctx.conversationId,
       });
     }
 

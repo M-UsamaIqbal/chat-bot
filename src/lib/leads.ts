@@ -1,5 +1,6 @@
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/config";
+import { notifyNewLead } from "@/lib/notify";
 import type { LeadInput } from "@/lib/validation";
 
 export type LeadUpsertResult =
@@ -14,7 +15,8 @@ export type LeadUpsertResult =
 export async function upsertLead(
   organizationId: string,
   conversationId: string | null,
-  input: LeadInput
+  input: LeadInput,
+  orgName?: string
 ): Promise<LeadUpsertResult> {
   if (!isSupabaseConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { ok: false, reason: "db_unconfigured" };
@@ -54,6 +56,16 @@ export async function upsertLead(
       service_interest: input.service_interest ?? null,
       requirements: input.requirements ?? null,
       status: "new",
+    });
+
+    // Fire an ops notification for genuinely new leads (not repeat/dedup hits).
+    await notifyNewLead({
+      orgName,
+      name: input.name,
+      email,
+      phone: input.phone ?? null,
+      service_interest: input.service_interest ?? null,
+      requirements: input.requirements ?? null,
     });
     return { ok: true, deduped: false };
   } catch (err) {

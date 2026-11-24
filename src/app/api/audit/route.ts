@@ -12,7 +12,7 @@ const schema = z.object({ url: z.string().min(3).max(300) });
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const rl = rateLimit(`audit:${ip}`, 10, 60_000);
+  const rl = await rateLimit(`audit:${ip}`, 10, 60_000);
   if (!rl.success) {
     return NextResponse.json(
       { error: "Too many audits. Please wait a moment." },

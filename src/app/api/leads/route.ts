@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const rl = rateLimit(`lead:${ip}`, 5, 60_000);
+  const rl = await rateLimit(`lead:${ip}`, 5, 60_000);
   if (!rl.success) {
     return NextResponse.json(
       { error: "Too many submissions. Please wait a moment." },
@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
     ? await ensureConversation(org, parsed.data.sessionId)
     : null;
 
-  const result = await upsertLead(org.org.id, conversationId, parsed.data);
+  const result = await upsertLead(
+    org.org.id,
+    conversationId,
+    parsed.data,
+    org.org.name
+  );
 
   if (!result.ok && result.reason === "db_unconfigured") {
     return NextResponse.json(

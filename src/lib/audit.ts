@@ -6,6 +6,7 @@
  * SSRF-guarded: only public http(s) hosts are fetched.
  */
 
+import { lookup } from "node:dns/promises";
 import type { AuditResult, AuditInsight, TrackerResult } from "@/lib/types";
 export type { AuditResult, TrackerResult };
 
@@ -83,23 +84,76 @@ export function normalizeUrl(input: string): string | null {
   }
 }
 
-/** Blocks private / loopback / link-local hosts to prevent SSRF. */
-function isPublicHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal"))
-    return false;
-  // IPv6 loopback / unique-local
-  if (h === "::1" || h.startsWith("fc") || h.startsWith("fd")) return false;
-  // IPv4 private ranges
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+/** True if an IP address literal is private / loopback / link-local / CGNAT. */
+export function ipIsPrivate(ip: string): boolean {
+  const h = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  // IPv6 loopback / unique-local (fc00::/7) / link-local (fe80::/10)
+  if (h === "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80"))
+    return true;
+  // IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.1) -> test the embedded IPv4.
+  const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  const v4 = mapped ? mapped[1] : h;
+  const m = v4.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
     const [a, b] = [parseInt(m[1], 10), parseInt(m[2], 10)];
-    if (a === 10 || a === 127 || a === 0) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true; // link-local
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  }
+  return false;
+}
+
+/**
+ * Synchronous hostname guard: blocks localhost/.local/.internal and private IP
+ * literals. Used for fast per-request filtering (redirects, subresources).
+ * Does NOT resolve DNS — pair with hostResolvesPublic() for full protection.
+ */
+export function isPublicHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    h === "localhost" ||
+    h.endsWith(".local") ||
+    h.endsWith(".internal") ||
+    h.endsWith(".localhost")
+  )
+    return false;
+  // IP literal? (IPv4 dotted-quad or any IPv6 with a colon)
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":")) {
+    return !ipIsPrivate(h);
   }
   return true;
+}
+
+/**
+ * Resolves a hostname and verifies EVERY address is public — defeats DNS
+ * rebinding, where a public-looking host resolves to an internal IP. Returns
+ * false on resolution failure (fail closed).
+ */
+async function hostResolvesPublic(hostname: string): Promise<boolean> {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":")) {
+    return !ipIsPrivate(h); // already an IP literal
+  }
+  try {
+    const addrs = await lookup(h, { all: true });
+    return addrs.length > 0 && addrs.every((a) => !ipIsPrivate(a.address));
+  } catch {
+    return false;
+  }
+}
+
+/** Full SSRF guard for a URL: public hostname AND resolves only to public IPs. */
+async function assertPublicUrl(url: string): Promise<boolean> {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  if (!isPublicHost(host)) return false;
+  return hostResolvesPublic(host);
 }
 
 const BROWSER_UA =
@@ -303,6 +357,19 @@ async function auditWithBrowser(url: string): Promise<AuditResult> {
       userAgent: BROWSER_UA,
       viewport: { width: 1366, height: 850 },
     });
+    // SSRF: abort any request (including redirects/subresources) to a private
+    // host or IP literal. Mirrors the top-level URL guard for the whole session.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await context.route("**/*", (route: any) => {
+      try {
+        const host = new URL(route.request().url()).hostname;
+        if (!isPublicHost(host)) return route.abort();
+      } catch {
+        /* unparseable URL — let Playwright handle it */
+      }
+      return route.continue();
+    });
+
     const page = await context.newPage();
     const requests: string[] = [];
     page.on("request", (r: { url(): string }) => {
@@ -317,6 +384,23 @@ async function auditWithBrowser(url: string): Promise<AuditResult> {
       /* continue — some requests may already be captured */
     }
     finalUrl = page.url() || url;
+
+    // A redirect may have landed on a non-public host (DNS rebinding included,
+    // since assertPublicUrl re-resolves). Refuse to report on it.
+    if (!(await assertPublicUrl(finalUrl))) {
+      return {
+        ok: false,
+        url,
+        finalUrl,
+        trackers: [],
+        foundCount: 0,
+        coreFound: 0,
+        coreTotal: 4,
+        viaGtm: false,
+        checkedAt,
+        error: "Only public websites can be scanned.",
+      };
+    }
     await page.waitForTimeout(3500);
     await acceptConsent(page);
     await page.waitForTimeout(3500);
@@ -391,7 +475,7 @@ export async function auditTracking(rawUrl: string): Promise<AuditResult> {
       checkedAt: new Date().toISOString(),
       error: "That doesn't look like a valid website URL.",
     };
-  if (!isPublicHost(new URL(url).hostname))
+  if (!(await assertPublicUrl(url)))
     return {
       ok: false,
       url: rawUrl,
@@ -433,7 +517,7 @@ async function auditWithHtml(rawUrl: string): Promise<AuditResult> {
   };
 
   if (!url) return { ...base, error: "That doesn't look like a valid website URL." };
-  if (!isPublicHost(new URL(url).hostname))
+  if (!(await assertPublicUrl(url)))
     return { ...base, error: "Only public websites can be scanned." };
 
   // 1) Fetch the page itself.

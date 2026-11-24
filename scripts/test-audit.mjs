@@ -6,7 +6,12 @@
  * the live page) is still detected AND flagged viaGtm — while tags that fire
  * directly on the page are NOT flagged viaGtm.
  */
-import { analyzeCorpus, buildInsights } from "../src/lib/audit.ts";
+import {
+  analyzeCorpus,
+  buildInsights,
+  ipIsPrivate,
+  isPublicHost,
+} from "../src/lib/audit.ts";
 
 let pass = 0,
   fail = 0;
@@ -91,6 +96,28 @@ console.log("\nCase 4: insights & grade");
     "consent-gated tag produces an 'isn't firing' warning",
     gi.some((i) => /isn't firing/.test(i.title))
   );
+}
+
+// --- Case 5: SSRF guards (private IPs + internal hostnames blocked).
+console.log("\nCase 5: SSRF host/IP guards");
+{
+  // Private / loopback / link-local / CGNAT / IPv6 must be flagged private.
+  for (const ip of ["10.0.0.5", "127.0.0.1", "192.168.1.1", "172.16.0.1", "169.254.169.254", "100.64.0.1", "::1", "::ffff:10.0.0.1", "fd00::1"]) {
+    check(`ipIsPrivate("${ip}") === true`, ipIsPrivate(ip) === true);
+  }
+  // Public IPs must NOT be flagged private.
+  for (const ip of ["8.8.8.8", "1.1.1.1", "142.250.72.14"]) {
+    check(`ipIsPrivate("${ip}") === false`, ipIsPrivate(ip) === false);
+  }
+  // Internal hostnames + private IP literals blocked by isPublicHost.
+  for (const h of ["localhost", "foo.local", "svc.internal", "127.0.0.1", "10.1.2.3", "169.254.169.254"]) {
+    check(`isPublicHost("${h}") === false`, isPublicHost(h) === false);
+  }
+  // Normal public hostnames allowed.
+  for (const h of ["wetrackads.com", "example.com", "8.8.8.8"]) {
+    const expected = h === "8.8.8.8"; // IP literal public -> allowed
+    check(`isPublicHost("${h}") allowed`, isPublicHost(h) === (h.includes(".com") ? true : expected));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
