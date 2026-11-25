@@ -11,6 +11,7 @@ import { buildToolDefinitions, executeTool } from "@/lib/chat-tools";
 import { ensureConversation, saveMessage } from "@/lib/conversations";
 import { getKnowledgeContext } from "@/lib/knowledge";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { isOriginAllowed, corsHeaders } from "@/lib/origin";
 import { isAIConfigured } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -20,14 +21,29 @@ function sse(obj: unknown) {
   return new TextEncoder().encode(JSON.stringify(obj) + "\n");
 }
 
+/** CORS preflight for cross-origin widget embeds. */
+export async function OPTIONS(req: NextRequest) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
+}
+
 export async function POST(req: NextRequest) {
+  const cors = corsHeaders(req);
+
+  // ---- Origin allow-list (opt-in via WIDGET_ALLOWED_ORIGINS) -------------
+  if (!isOriginAllowed(req)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed." }), {
+      status: 403,
+      headers: { "Content-Type": "application/json", ...cors },
+    });
+  }
+
   // ---- Rate limiting (per IP) -------------------------------------------
   const ip = getClientIp(req);
   const rl = await rateLimit(`chat:${ip}`, 30, 60_000);
   if (!rl.success) {
     return new Response(
       JSON.stringify({ error: "Too many requests. Please slow down." }),
-      { status: 429, headers: { "Content-Type": "application/json" } }
+      { status: 429, headers: { "Content-Type": "application/json", ...cors } }
     );
   }
 
@@ -68,7 +84,7 @@ export async function POST(req: NextRequest) {
       },
     });
     return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: { "Content-Type": "text/plain; charset=utf-8", ...cors },
     });
   }
 
@@ -221,6 +237,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
+      ...cors,
     },
   });
 }

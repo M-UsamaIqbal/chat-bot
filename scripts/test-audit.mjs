@@ -12,6 +12,11 @@ import {
   ipIsPrivate,
   isPublicHost,
 } from "../src/lib/audit.ts";
+import {
+  isOriginAllowed,
+  corsHeaders,
+  originRestrictionEnabled,
+} from "../src/lib/origin.ts";
 
 let pass = 0,
   fail = 0;
@@ -118,6 +123,38 @@ console.log("\nCase 5: SSRF host/IP guards");
     const expected = h === "8.8.8.8"; // IP literal public -> allowed
     check(`isPublicHost("${h}") allowed`, isPublicHost(h) === (h.includes(".com") ? true : expected));
   }
+}
+
+// --- Case 6: widget origin allow-list (opt-in via WIDGET_ALLOWED_ORIGINS).
+console.log("\nCase 6: widget origin allow-list");
+{
+  const fakeReq = (origin, referer) => {
+    const h = new Map();
+    if (origin) h.set("origin", origin);
+    if (referer) h.set("referer", referer);
+    return { headers: { get: (k) => h.get(k.toLowerCase()) ?? null } };
+  };
+
+  // Restriction OFF -> everything allowed, CORS "*".
+  delete process.env.WIDGET_ALLOWED_ORIGINS;
+  check("no allow-list => restriction disabled", originRestrictionEnabled() === false);
+  check("no allow-list => any origin allowed", isOriginAllowed(fakeReq("https://evil.example")) === true);
+  check("no allow-list => CORS is *", corsHeaders(fakeReq("https://evil.example"))["Access-Control-Allow-Origin"] === "*");
+
+  // Restriction ON.
+  process.env.WIDGET_ALLOWED_ORIGINS = "https://wetrackads.com, https://www.wetrackads.com";
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+  check("allow-list => restriction enabled", originRestrictionEnabled() === true);
+  check("allowed origin passes", isOriginAllowed(fakeReq("https://wetrackads.com")) === true);
+  check("app origin always allowed (iframe)", isOriginAllowed(fakeReq("https://app.example.com")) === true);
+  check("disallowed origin blocked", isOriginAllowed(fakeReq("https://evil.example")) === false);
+  check("missing origin blocked when restricted", isOriginAllowed(fakeReq(null, null)) === false);
+  check("referer fallback works", isOriginAllowed(fakeReq(null, "https://wetrackads.com/page")) === true);
+  check("CORS reflects allowed origin", corsHeaders(fakeReq("https://wetrackads.com"))["Access-Control-Allow-Origin"] === "https://wetrackads.com");
+  check("CORS omits disallowed origin", corsHeaders(fakeReq("https://evil.example"))["Access-Control-Allow-Origin"] === undefined);
+
+  // Clean up so env doesn't leak to other test cases.
+  delete process.env.WIDGET_ALLOWED_ORIGINS;
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

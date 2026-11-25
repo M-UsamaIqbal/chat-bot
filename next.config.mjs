@@ -10,6 +10,17 @@ const nextConfig = {
     "/api/audit": ["./node_modules/@sparticuz/chromium/bin/**"],
   },
   async headers() {
+    // Restrict who may iframe the widget when WIDGET_ALLOWED_ORIGINS is set;
+    // otherwise allow any site (current behavior). The app's own origin is
+    // always permitted so same-origin previews keep working.
+    const allowed = (process.env.WIDGET_ALLOWED_ORIGINS || "")
+      .split(",")
+      .map((s) => s.trim().replace(/\/+$/, ""))
+      .filter(Boolean);
+    const frameAncestors = allowed.length
+      ? `frame-ancestors 'self' ${allowed.join(" ")}`
+      : "frame-ancestors *";
+
     return [
       {
         // Allow the embeddable widget script + loader to be requested cross-origin.
@@ -23,7 +34,7 @@ const nextConfig = {
         // The widget page is designed to be iframed on customer sites.
         source: "/widget",
         headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "Content-Security-Policy", value: frameAncestors },
         ],
       },
     ];
